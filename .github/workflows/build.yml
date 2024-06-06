@@ -8,10 +8,14 @@ on:
 permissions:
   contents: write
   packages: write
-  
+
 jobs:
   check_version:
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
 
     outputs:
       FRIDA_VERSION: ${{ steps.pullFridaLatestRelease.outputs.FRIDA_VERSION }}
@@ -67,6 +71,10 @@ jobs:
   create_release:
     needs: check_version
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
     if: needs.check_version.outputs.ALREADY_RELEASE == '0'
 
     steps:
@@ -112,6 +120,10 @@ jobs:
   android_build:
     runs-on: ubuntu-20.04
     needs: [check_version, create_release]
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
     strategy:
       matrix:
         arch: [x86, x86_64, arm, arm64]
