@@ -5,19 +5,20 @@ on:
     - cron: "0 9/12 * * *"
   workflow_dispatch:
 
-jobs: 
+jobs:
   check_version:
     runs-on: ubuntu-20.04
 
     outputs:
       FRIDA_VERSION: ${{ steps.pullFridaLatestRelease.outputs.FRIDA_VERSION }}
       ALREADY_RELEASE: ${{ steps.checkReleaseVersion.outputs.ALREADY_RELEASE }}
+
     steps:
       - name: Pull Frida Latest Release
         id: pullFridaLatestRelease
         uses: actions/github-script@v3.1.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             const releaseResponse = await github.repos.getLatestRelease({
               owner: 'frida',
@@ -27,11 +28,12 @@ jobs:
               data: { tag_name: ver }
             } = releaseResponse;
             core.setOutput('FRIDA_VERSION', ver);
+
       - name: Check release version
         id: checkReleaseVersion
         uses: actions/github-script@v3.1.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             try {
               const releaseVersion = '${{ steps.pullFridaLatestRelease.outputs.FRIDA_VERSION }}'
@@ -64,15 +66,44 @@ jobs:
     if: needs.check_version.outputs.ALREADY_RELEASE == '0'
 
     steps:
-      - uses: actions/create-release@master
+      - name: Create tag if not exists
+        id: createTag
+        uses: actions/github-script@v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const releaseVersion = '${{ needs.check_version.outputs.FRIDA_VERSION }}';
+            try {
+              await github.git.getRef({
+                owner: '${{ secrets.GIT_OWNER }}',
+                repo: '${{ secrets.GIT_REPO }}',
+                ref: 'tags/' + releaseVersion
+              });
+              core.setOutput('TAG_EXISTS', '1');
+            } catch (e) {
+              if (e.status === 404) {
+                core.setOutput('TAG_EXISTS', '0');
+              } else {
+                core.setFailed(e.message);
+              }
+            }
+
+      - name: Create new tag if exists
+        if: steps.createTag.outputs.TAG_EXISTS == '1'
+        run: |
+          NEW_TAG="${{ needs.check_version.outputs.FRIDA_VERSION }}-$(date +'%Y%m%d%H%M%S')"
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      - name: Create release
         id: createRelease
-        name: Create Runner Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: "${{ needs.check_version.outputs.FRIDA_VERSION }}"
-          release_name: "${{ needs.check_version.outputs.FRIDA_VERSION }}"
-          prerelease: false
+        run: |
+          TAG_NAME=${{ needs.check_version.outputs.FRIDA_VERSION }}
+          if [ -n "${{ env.NEW_TAG }}" ]; then
+            TAG_NAME=${{ env.NEW_TAG }}
+          fi
+          gh release create $TAG_NAME --title "$TAG_NAME" --repo ${{ secrets.GIT_OWNER }}/${{ secrets.GIT_REPO }} --notes "Automated release."
 
   android_build:
     runs-on: ubuntu-20.04
@@ -165,6 +196,7 @@ jobs:
           } catch (e) {
             core.setFailed(e.message);
           }
+
     - name: package build result for Android
       shell: bash
       run: |
