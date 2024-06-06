@@ -1,5 +1,4 @@
 name: strongR-frida
-
 on:
   schedule:
     - cron: "0 9/12 * * *"
